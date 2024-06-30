@@ -68,7 +68,11 @@ type Process with
                 startInfo.StandardOutputEncoding <- Encoding.UTF8
                 startInfo.StandardErrorEncoding <- Encoding.UTF8
 
+            startInfo.CreateNoWindow <- true
+            startInfo.UseShellExecute <- true
+            //startInfo.UseShellExecute
             use result = Process.Start startInfo
+            result.EnableRaisingEvents <- true
             let standardOutputSb = StringBuilder()
 
             let handleDataReceived (ev: DataReceivedEventArgs) =
@@ -90,6 +94,7 @@ type Process with
                     AnsiConsole.WriteLine $"{commandLogString} is cancelled or timed out and the process will be killed."
 
                     result.Kill()
+                    result.WaitForExit()
                 )
 
             use _ =
@@ -98,6 +103,17 @@ type Process with
                     ct.Register(fun () ->
                         AnsiConsole.MarkupLine("[yellow]Command is cancelled by your token[/]")
                         result.Kill()
+                        AnsiConsole.MarkupLine("[yellow]Waiting for exit[/]")
+                        while not result.HasExited && not result.Responding do
+                            AnsiConsole.MarkupLine("[yellow]not exited[/]")
+                            Thread.Sleep 1000
+                        // result.CancelOutputRead()
+                        // result.CancelErrorRead()
+                        result.WaitForExit()
+                    // if (result.HasExited) then
+                    //     AnsiConsole.MarkupLine("[yellow]exited[/]")
+                    // else
+                    //     AnsiConsole.MarkupLine("[yellow]not exited[/]")
                     )
                     :> IDisposable
                 | _ ->
