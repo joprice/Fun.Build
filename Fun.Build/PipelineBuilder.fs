@@ -275,55 +275,56 @@ type PipelineBuilder(name: string) =
 /// You can compose stage with it, so they can run in sequence.
 let inline pipeline name = PipelineBuilder name
 
-
 /// Only when you have -h or --help in your command, it will try to print the help informations.
 /// When you use dotnet fsi, please remember to add --, so the help options can be passed in. eg: dotnet fsi demo.fsx -- -h
 /// If you only have one specified pipeline, it will try to print its command only help information.
 let tryPrintPipelineCommandHelp () =
     let args = Environment.GetCommandLineArgs()
-    let pipelineIndex = args |> Seq.tryFindIndex (fun arg -> arg = "-p" || arg = "--pipeline")
+    let pipelineIndex =
+        args
+        |> Seq.tryFindIndex (fun arg -> arg = "-p" || arg = "--pipeline")
+        |> Option.bind (fun index -> args |> Array.tryItem (index + 1))
 
     match pipelineIndex with
-    | Some index ->
-        let pipelineName = args[index + 1]
+    | Some pipelineName ->
         let isPipelineRegistered =
             runIfOnlySpecifiedPipelines
             |> Seq.exists (fun struct (_, x) -> x.Name.Equals(pipelineName, StringComparison.OrdinalIgnoreCase))
         if not isPipelineRegistered then
             AnsiConsole.MarkupLineInterpolated $"Pipeline [red]{pipelineName}[/] is not found."
             AnsiConsole.MarkupLine "You can use [green]runIfOnlySpecified[/] for your pipline, or check if the name is correct."
+            exit 1
 
-    | _ ->
-        let isHelp = args |> Seq.exists (fun arg -> arg = "-h" || arg = "--help")
+    | None ->
+        //let isHelp = args |> Seq.exists (fun arg -> arg = "-h" || arg = "--help")
+        //if isHelp then
+        if runIfOnlySpecifiedPipelines.Count = 1 then
+            let verbose = args |> Seq.exists (fun arg -> arg = "-v" || arg = "--verbose")
+            let struct (_, pipeline) = runIfOnlySpecifiedPipelines[0]
+            pipeline.RunCommandHelp(verbose)
+        else
+            let scriptFile = getFsiFileName ()
 
-        if isHelp then
-            if runIfOnlySpecifiedPipelines.Count = 1 then
-                let verbose = args |> Seq.exists (fun arg -> arg = "-v" || arg = "--verbose")
-                let struct (_, pipeline) = runIfOnlySpecifiedPipelines[0]
-                pipeline.RunCommandHelp(verbose)
+            AnsiConsole.WriteLine "Descriptions:"
+            AnsiConsole.WriteLine "  Below are the pipelines which are set as runIfOnlySpecified"
+            AnsiConsole.WriteLine ""
 
-            else
-                let scriptFile = getFsiFileName ()
+            AnsiConsole.WriteLine "Pipelines:"
 
-                AnsiConsole.WriteLine "Descriptions:"
-                AnsiConsole.WriteLine "  Below are the pipelines which are set as runIfOnlySpecified"
-                AnsiConsole.WriteLine ""
+            if runIfOnlySpecifiedPipelines.Count = 0 then
+                AnsiConsole.MarkupLine
+                    "[red]* No run if only specified pipelines are found. Please use [green]runIfOnlySpecified[/] at the end of your pipeline CE.[/]"
 
-                AnsiConsole.WriteLine "Pipelines:"
+            for struct (specified, pipeline) in runIfOnlySpecifiedPipelines do
+                printCommandOption "  " (pipeline.Name + if specified then "" else " (default)") (defaultValueArg pipeline.Description "")
 
-                if runIfOnlySpecifiedPipelines.Count = 0 then
-                    AnsiConsole.MarkupLine
-                        "[red]* No run if only specified pipelines are found. Please use [green]runIfOnlySpecified[/] at the end of your pipeline CE.[/]"
+            AnsiConsole.WriteLine ""
+            AnsiConsole.WriteLine "Usage:"
+            AnsiConsole.WriteLine $"  dotnet fsi {scriptFile} -- -h"
+            AnsiConsole.WriteLine $"  dotnet fsi {scriptFile} -- -p your_pipeline [options]"
+            AnsiConsole.WriteLine ""
 
-                for struct (specified, pipeline) in runIfOnlySpecifiedPipelines do
-                    printCommandOption "  " (pipeline.Name + if specified then "" else " (default)") (defaultValueArg pipeline.Description "")
-
-                AnsiConsole.WriteLine ""
-                AnsiConsole.WriteLine "Usage:"
-                AnsiConsole.WriteLine $"  dotnet fsi {scriptFile} -- -h"
-                AnsiConsole.WriteLine $"  dotnet fsi {scriptFile} -- -p your_pipeline [options]"
-                AnsiConsole.WriteLine ""
-
-                AnsiConsole.WriteLine "Options:"
-                printHelpOptions ()
-                AnsiConsole.WriteLine ""
+            AnsiConsole.WriteLine "Options:"
+            printHelpOptions ()
+            AnsiConsole.WriteLine ""
+        exit 1
